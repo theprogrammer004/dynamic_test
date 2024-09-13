@@ -1,39 +1,41 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-import uvicorn
+import asyncio
+import websockets
 
-app = FastAPI()
-
-# Dictionary to store connected WebSocket clients (ESP32 devices)
+# Dictionary to store connected clients (ESP32 devices)
 connected_clients = {}
 
-@app.websocket("/ws/{client_id}")
-async def websocket_endpoint(websocket: WebSocket, client_id: str):
-    await websocket.accept()  # Accept the WebSocket connection
-    connected_clients[client_id] = websocket  # Store client connection by ID
-    print(f"Client {client_id} connected.")
-    
+async def handler(websocket, path):
     try:
+        # Receive client ID from the ESP32 (e.g., "esp32_pot_001")
+        client_id = await websocket.recv()
+        connected_clients[client_id] = websocket
+        print(f"Client {client_id} connected.")
+        
+        # Keep the connection open and handle incoming messages
         while True:
-            # Receive data from ESP32
-            data = await websocket.receive_text()
-            print(f"Message from {client_id}: {data}")
-            # Add any additional handling of the incoming message here
+            message = await websocket.recv()
+            print(f"Message from {client_id}: {message}")
+            # You can add logic here to respond to messages from the ESP32
 
-    except WebSocketDisconnect:
-        # Handle client disconnect
+    except websockets.ConnectionClosed:
         print(f"Client {client_id} disconnected.")
-        connected_clients.pop(client_id, None)
+        del connected_clients[client_id]
 
-# Function to send data to a specific client (ESP32)
-async def send_data_to_client(client_id: str, message: str):
+# Function to send data to the ESP32
+async def send_data_to_client(client_id, data):
     if client_id in connected_clients:
         websocket = connected_clients[client_id]
-        await websocket.send_text(message)
-        print(f"Sent data to {client_id}: {message}")
+        await websocket.send(data)
+        print(f"Sent data to {client_id}: {data}")
     else:
-        print(f"Client {client_id} not connected.")
+        print(f"Client {client_id} is not connected.")
 
+# Start the WebSocket server on Render (or any cloud platform)
+async def main():
+    print("WebSocket server started.")
+    async with websockets.serve(handler, "0.0.0.0", 10000):  # Use port 10000 for Render
+        await asyncio.Future()  # Run forever
 
-if __name__ == "__main__":
-    # Run FastAPI server
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+# Run the WebSocket server
+asyncio.run(main())
+ 
