@@ -4,7 +4,7 @@ from pydantic import BaseModel
 app = FastAPI()
 
 # Global variable to store the message
-message_to_display = "Welcome to TFT!"
+message_to_display = "WElcome to GIA"
 
 # Define the data structure for the POST request
 class MessageData(BaseModel):
