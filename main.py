@@ -1,46 +1,42 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from typing import List
-from pydantic import BaseModel
+from fastapi import FastAPI, WebSocket
+from fastapi.responses import HTMLResponse
 
 app = FastAPI()
 
-# Store connected WebSocket clients
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: List[WebSocket] = []
+html = """
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>WebSocket Test</title>
+    </head>
+    <body>
+        <h1>WebSocket Test</h1>
+        <button onclick="connectWebSocket()">Connect</button>
+        <script>
+            function connectWebSocket() {
+                const ws = new WebSocket("wss://your-render-app-url.onrender.com/ws");
+                ws.onopen = function() {
+                    console.log("WebSocket connection opened");
+                };
+                ws.onmessage = function(event) {
+                    console.log("Message from server: ", event.data);
+                };
+                ws.onclose = function() {
+                    console.log("WebSocket connection closed");
+                };
+            }
+        </script>
+    </body>
+</html>
+"""
 
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections.append(websocket)
+@app.get("/")
+async def get():
+    return HTMLResponse(html)
 
-    def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
-
-    async def send_personal_message(self, message: str, websocket: WebSocket):
-        await websocket.send_text(message)
-
-    async def broadcast(self, message: str):
-        for connection in self.active_connections:
-            await connection.send_text(message)
-
-manager = ConnectionManager()
-
-# WebSocket endpoint to handle ESP32 connections
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    await manager.connect(websocket)
-    try:
-        while True:
-            data = await websocket.receive_text()
-            await manager.send_personal_message(f"Received: {data}", websocket)
-    except WebSocketDisconnect:
-        manager.disconnect(websocket)
-
-# REST endpoint for sending messages to all connected WebSocket clients
-class Message(BaseModel):
-    message: str
-
-@app.post("/send-message")
-async def send_message(message: Message):
-    await manager.broadcast(message.message)
-    return {"success": True, "message": message.message}
+    await websocket.accept()
+    while True:
+        data = await websocket.receive_text()
+        await websocket.send_text(f"Message text was: {data}")
