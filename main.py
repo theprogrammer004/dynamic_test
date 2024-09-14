@@ -1,28 +1,46 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from typing import List
 from pydantic import BaseModel
 
 app = FastAPI()
 
-# Global variable to store the message
-message_to_display = "WElcome to GIA"
+# Store connected WebSocket clients
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
 
-# Define the data structure for the POST request
-class MessageData(BaseModel):
-    data: str
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
 
-# Route to change the message
-@app.post("/send_data/")
-async def send_data(message: MessageData):
-    global message_to_display
-    message_to_display = message.data
-    return {"status": "success", "message": "Message updated successfully"}
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
 
-# Route to fetch the current message
-@app.get("/get_data/")
-async def get_data():
-    return {"message": message_to_display}
+    async def send_personal_message(self, message: str, websocket: WebSocket):
+        await websocket.send_text(message)
 
-# Optional: Root endpoint to verify the API is running
-@app.get("/")
-async def root():
-    return {"status": "FastAPI server running"}
+    async def broadcast(self, message: str):
+        for connection in self.active_connections:
+            await connection.send_text(message)
+
+manager = ConnectionManager()
+
+# WebSocket endpoint to handle ESP32 connections
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            await manager.send_personal_message(f"Received: {data}", websocket)
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+
+# REST endpoint for sending messages to all connected WebSocket clients
+class Message(BaseModel):
+    message: str
+
+@app.post("/send-message")
+async def send_message(message: Message):
+    await manager.broadcast(message.message)
+    return {"success": True, "message": message.message}
