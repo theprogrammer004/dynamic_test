@@ -1,4 +1,3 @@
-import base64
 from fastapi import FastAPI, WebSocket, HTTPException, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -60,12 +59,9 @@ async def send_image(file: UploadFile = File(...)):
     # Read the image file
     image_data = await file.read()
 
-    # Encode the image to base64
-    encoded_image = base64.b64encode(image_data).decode('utf-8')
-
-    # Send the encoded image to all connected WebSocket clients
+    # Send the image data as binary to all connected WebSocket clients
     for client in clients:
-        await client.send_text(f"IMAGE:{encoded_image}")
+        await client.send_bytes(image_data)
 
     return {"status": "Image sent to all clients"}    
 
