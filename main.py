@@ -53,6 +53,21 @@ async def send_message(message: Message):
         await client.send_text(message.message)
     return {"status": "Message sent"}
 
+# New API endpoint to send an image to connected WebSocket clients
+@app.post("/send_image/")
+async def send_image(file: UploadFile = File(...)):
+    # Read the image file
+    image_data = await file.read()
+
+    # Encode the image to base64
+    encoded_image = base64.b64encode(image_data).decode('utf-8')
+
+    # Send the encoded image to all connected WebSocket clients
+    for client in clients:
+        await client.send_text(f"IMAGE:{encoded_image}")
+
+    return {"status": "Image sent to all clients"}    
+
 # Run FastAPI server with Uvicorn
 if __name__ == "__main__":
     import uvicorn
