@@ -3,6 +3,7 @@ from fastapi import FastAPI, WebSocket, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 import asyncio
+from starlette.websockets import WebSocketDisconnect
 
 # Initialize FastAPI app
 app = FastAPI()
@@ -33,9 +34,23 @@ async def websocket_endpoint(websocket: WebSocket):
         while True:
             data = await websocket.receive_text()
             logging.info(f"Received message: {data}")
+
+            # Process received message (could be text or control commands)
+            if data.startswith("TEXT:"):
+                # Broadcast the text message to all clients
+                text_message = data[5:]  # Strip "TEXT:" prefix
+                await broadcast_text_message(text_message)
+            else:
+                logging.info(f"Received unknown message: {data}")
+
     except WebSocketDisconnect:
         clients.remove(websocket)
         logging.info("WebSocket connection closed")
+
+# Broadcast text message to all connected WebSocket clients
+async def broadcast_text_message(message: str):
+    for client in clients:
+        await client.send_text(f"TEXT:{message}")
 
 # Send image chunks to WebSocket clients
 async def send_image_chunks(image_data: bytes, chunk_size: int = 2048):
@@ -60,7 +75,12 @@ async def send_image(file: UploadFile = File(...)):
     image_data = await file.read()
     await send_image_chunks(image_data)
     return {"status": "Image sent in chunks"}
-  
+
+# Endpoint to broadcast a text message (HTTP POST)
+@app.post("/send_message/")
+async def send_message(message: str):
+    await broadcast_text_message(message)
+    return {"status": "Message sent"}
 
 # Run FastAPI server with Uvicorn
 if __name__ == "__main__":
